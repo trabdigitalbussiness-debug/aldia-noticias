@@ -1,0 +1,12 @@
+# Configuración de Netlify para «al día»
+[build]
+  publish = "app"
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"

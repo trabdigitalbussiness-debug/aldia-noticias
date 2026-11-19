@@ -1,0 +1,163 @@
+{
+ "actualizado": "2026-11-19T16:16:40+00:00",
+ "temas": [
+  {
+   "id": "nacional",
+   "nombre": "Nacional"
+  },
+  {
+   "id": "internacional",
+   "nombre": "Internacional"
+  },
+  {
+   "id": "economia",
+   "nombre": "Economía"
+  },
+  {
+   "id": "deportes",
+   "nombre": "Deportes"
+  },
+  {
+   "id": "tecnologia",
+   "nombre": "Tecnología y ciencia"
+  },
+  {
+   "id": "cultura",
+   "nombre": "Cultura"
+  },
+  {
+   "id": "sociedad",
+   "nombre": "Sociedad"
+  }
+ ],
+ "noticias": [
+  {
+   "id": "ae373b30429d",
+   "titulo": "El Gobierno aprueba la reforma de la ley de vivienda",
+   "resumen": "El Consejo de Ministros ha dado luz verde este jueves a la reforma. La norma limita los precios del alquiler en zonas tensionadas. Los propietarios tendrán seis meses para adaptarse.",
+   "tema": "economia",
+   "imagen": "ejemplo/vivienda.jpg",
+   "fecha": "2026-11-19T16:14:05+00:00",
+   "fuentes": [
+    {
+     "periodico": "El País",
+     "titulo": "El Gobierno aprueba la reforma de la ley de vivienda",
+     "enlace": "https://elpais.com/economia/2026-11-12/el-gobierno-aprueba-reforma-ley-vivienda.html"
+    },
+    {
+     "periodico": "El Mundo",
+     "titulo": "El Gobierno aprueba la reforma de la ley de vivienda y limita los alquileres",
+     "enlace": "https://www.elmundo.es/espana/2026/11/12/reforma-vivienda.html"
+    }
+   ]
+  },
+  {
+   "id": "54470c5275e0",
+   "titulo": "El Real Madrid gana al Atlético en el derbi",
+   "resumen": "Victoria por 2-1 en el Bernabéu.",
+   "tema": "deportes",
+   "imagen": "ejemplo/futbol.jpg",
+   "fecha": "2026-11-19T16:14:05+00:00",
+   "fuentes": [
+    {
+     "periodico": "El País",
+     "titulo": "El Real Madrid gana al Atlético en el derbi",
+     "enlace": "https://elpais.com/deportes/2026-11-12/derbi.html"
+    }
+   ]
+  },
+  {
+   "id": "8bf2ccab9ae5",
+   "titulo": "Un nuevo modelo de inteligencia artificial bate récords",
+   "resumen": "La inteligencia artificial de Google supera las pruebas. Los expertos piden cautela.",
+   "tema": "tecnologia",
+   "imagen": "ejemplo/tecnologia.jpg",
+   "fecha": "2026-11-19T16:14:05+00:00",
+   "fuentes": [
+    {
+     "periodico": "El Mundo",
+     "titulo": "Un nuevo modelo de inteligencia artificial bate récords",
+     "enlace": "https://www.elmundo.es/noticias/2026/11/12/ia.html"
+    }
+   ]
+  },
+  {
+   "id": "76fa1e453f9d",
+   "titulo": "Estreno del festival de cine de Sevilla",
+   "resumen": "El certamen arranca con una película española.",
+   "tema": "cultura",
+   "imagen": "ejemplo/cine.jpg",
+   "fecha": "2026-11-19T16:14:05+00:00",
+   "fuentes": [
+    {
+     "periodico": "ABC",
+     "titulo": "Estreno del festival de cine de Sevilla",
+     "enlace": "https://www.abc.es/cultura/cine/festival-sevilla.html"
+    }
+   ]
+  },
+  {
+   "id": "89c0f66591c1",
+   "titulo": "La UE acuerda nuevas sanciones contra Rusia",
+   "resumen": "Los Veintisiete pactan un nuevo paquete de medidas. Entrará en vigor la próxima semana.",
+   "tema": "internacional",
+   "imagen": "ejemplo/europa.jpg",
+   "fecha": "2026-11-19T16:14:05+00:00",
+   "fuentes": [
+    {
+     "periodico": "20minutos",
+     "titulo": "La UE acuerda nuevas sanciones contra Rusia",
+     "enlace": "https://www.20minutos.es/internacional/ue-sanciones-rusia.html"
+    }
+   ]
+  },
+  {
+   "id": "891033b1969a",
+   "titulo": "Aviso amarillo por lluvias en Canarias",
+   "resumen": "La Aemet prevé lluvias intensas en el clima de las islas durante el fin de semana.",
+   "tema": "sociedad",
+   "imagen": "",
+   "fecha": "2026-11-19T16:14:05+00:00",
+   "fuentes": [
+    {
+     "periodico": "20minutos",
+     "titulo": "Aviso amarillo por lluvias en Canarias",
+     "enlace": "https://www.20minutos.es/noticia/lluvias-canarias.html"
+    }
+   ]
+  }
+ ],
+ "estado_fuentes": [
+  {
+   "periodico": "El País",
+   "rss": "pruebas/elpais.xml",
+   "ok": true,
+   "noticias": 3
+  },
+  {
+   "periodico": "El Mundo",
+   "rss": "pruebas/elmundo.xml",
+   "ok": true,
+   "noticias": 2
+  },
+  {
+   "periodico": "ABC",
+   "rss": "pruebas/abc.xml",
+   "ok": true,
+   "noticias": 1
+  },
+  {
+   "periodico": "20minutos",
+   "rss": "pruebas/20minutos.xml",
+   "ok": true,
+   "noticias": 2
+  },
+  {
+   "periodico": "La Razón",
+   "rss": "pruebas/larazon.xml",
+   "ok": false,
+   "error": "no element found: line 2, column 0"
+  }
+ ],
+ "ejemplo": true
+}

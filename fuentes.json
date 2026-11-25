@@ -1,23 +1,256 @@
 {
   "idioma": "es",
-  "actualizar_cada_minutos": 60,
+  "actualizar_cada_minutos": 30,
   "temas": [
-    {"id": "nacional", "nombre": "Nacional", "pistas": ["Gobierno", "Congreso", "PSOE", "PP", "Vox", "Sumar", "comunidad autónoma", "elecciones", "tribunal"]},
-    {"id": "internacional", "nombre": "Internacional", "pistas": ["EEUU", "Unión Europea", "Ucrania", "Rusia", "China", "Oriente Próximo", "ONU", "Latinoamérica"]},
-    {"id": "economia", "nombre": "Economía", "pistas": ["Ibex", "empleo", "paro", "inflación", "empresa", "BCE", "impuestos", "vivienda", "mercados"]},
-    {"id": "deportes", "nombre": "Deportes", "pistas": ["fútbol", "LaLiga", "Real Madrid", "Barcelona", "baloncesto", "tenis", "Fórmula 1", "selección"]},
-    {"id": "tecnologia", "nombre": "Tecnología y ciencia", "pistas": ["inteligencia artificial", "móvil", "Apple", "Google", "ciberseguridad", "ciencia", "espacio", "investigación"]},
-    {"id": "cultura", "nombre": "Cultura", "pistas": ["cine", "música", "libro", "exposición", "series", "teatro", "festival", "premio"]},
-    {"id": "sociedad", "nombre": "Sociedad", "pistas": ["sanidad", "educación", "sucesos", "clima", "tiempo", "igualdad", "consumo", "tráfico"]}
+    {
+      "id": "nacional",
+      "nombre": "Nacional",
+      "pistas": [
+        "Gobierno",
+        "Congreso",
+        "PSOE",
+        "PP",
+        "Vox",
+        "Sumar",
+        "comunidad autónoma",
+        "elecciones",
+        "tribunal"
+      ]
+    },
+    {
+      "id": "internacional",
+      "nombre": "Internacional",
+      "pistas": [
+        "EEUU",
+        "Unión Europea",
+        "Ucrania",
+        "Rusia",
+        "China",
+        "Oriente Próximo",
+        "ONU",
+        "Latinoamérica"
+      ]
+    },
+    {
+      "id": "economia",
+      "nombre": "Economía",
+      "pistas": [
+        "Ibex",
+        "empleo",
+        "paro",
+        "inflación",
+        "empresa",
+        "BCE",
+        "impuestos",
+        "vivienda",
+        "mercados"
+      ]
+    },
+    {
+      "id": "deportes",
+      "nombre": "Deportes",
+      "pistas": [
+        "fútbol",
+        "LaLiga",
+        "Real Madrid",
+        "Barcelona",
+        "baloncesto",
+        "tenis",
+        "Fórmula 1",
+        "selección"
+      ]
+    },
+    {
+      "id": "tecnologia",
+      "nombre": "Tecnología y ciencia",
+      "pistas": [
+        "inteligencia artificial",
+        "móvil",
+        "Apple",
+        "Google",
+        "ciberseguridad",
+        "ciencia",
+        "espacio",
+        "investigación"
+      ]
+    },
+    {
+      "id": "cultura",
+      "nombre": "Cultura",
+      "pistas": [
+        "cine",
+        "música",
+        "libro",
+        "exposición",
+        "series",
+        "teatro",
+        "festival",
+        "premio"
+      ]
+    },
+    {
+      "id": "sociedad",
+      "nombre": "Sociedad",
+      "pistas": [
+        "sanidad",
+        "educación",
+        "sucesos",
+        "clima",
+        "tiempo",
+        "igualdad",
+        "consumo",
+        "tráfico"
+      ]
+    }
   ],
   "periodicos": [
-    {"id": "elpais", "nombre": "El País", "web": "https://elpais.com", "rss": ["https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/portada"]},
-    {"id": "elmundo", "nombre": "El Mundo", "web": "https://www.elmundo.es", "rss": ["https://e00-elmundo.uecdn.es/elmundo/rss/portada.xml"]},
-    {"id": "abc", "nombre": "ABC", "web": "https://www.abc.es", "rss": ["https://www.abc.es/rss/2.0/portada/"]},
-    {"id": "lavanguardia", "nombre": "La Vanguardia", "web": "https://www.lavanguardia.com", "rss": ["https://www.lavanguardia.com/rss/home.xml"]},
-    {"id": "elconfidencial", "nombre": "El Confidencial", "web": "https://www.elconfidencial.com", "rss": ["https://rss.elconfidencial.com/espana/", "https://rss.elconfidencial.com/mundo/", "https://rss.elconfidencial.com/economia/"]},
-    {"id": "eldiario", "nombre": "elDiario.es", "web": "https://www.eldiario.es", "rss": ["https://www.eldiario.es/rss/"]},
-    {"id": "20minutos", "nombre": "20minutos", "web": "https://www.20minutos.es", "rss": ["https://www.20minutos.es/rss/"]},
-    {"id": "larazon", "nombre": "La Razón", "web": "https://www.larazon.es", "rss": ["https://www.larazon.es/rss/portada.xml"]}
+    {
+      "id": "elpais",
+      "nombre": "El País",
+      "web": "https://elpais.com",
+      "rss": [
+        "https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/portada"
+      ]
+    },
+    {
+      "id": "elmundo",
+      "nombre": "El Mundo",
+      "web": "https://www.elmundo.es",
+      "rss": [
+        "https://e00-elmundo.uecdn.es/elmundo/rss/portada.xml"
+      ]
+    },
+    {
+      "id": "abc",
+      "nombre": "ABC",
+      "web": "https://www.abc.es",
+      "rss": [
+        "https://www.abc.es/rss/2.0/portada/"
+      ]
+    },
+    {
+      "id": "lavanguardia",
+      "nombre": "La Vanguardia",
+      "web": "https://www.lavanguardia.com",
+      "rss": [
+        "https://www.lavanguardia.com/rss/home.xml"
+      ]
+    },
+    {
+      "id": "elconfidencial",
+      "nombre": "El Confidencial",
+      "web": "https://www.elconfidencial.com",
+      "rss": [
+        "https://rss.elconfidencial.com/espana/",
+        "https://rss.elconfidencial.com/mundo/",
+        "https://rss.elconfidencial.com/economia/"
+      ]
+    },
+    {
+      "id": "eldiario",
+      "nombre": "elDiario.es",
+      "web": "https://www.eldiario.es",
+      "rss": [
+        "https://www.eldiario.es/rss/"
+      ]
+    },
+    {
+      "id": "20minutos",
+      "nombre": "20minutos",
+      "web": "https://www.20minutos.es",
+      "rss": [
+        "https://www.20minutos.es/rss/"
+      ]
+    },
+    {
+      "id": "larazon",
+      "nombre": "La Razón",
+      "web": "https://www.larazon.es",
+      "rss": [
+        "https://www.larazon.es/rss/portada.xml"
+      ]
+    },
+    {
+      "id": "okdiario",
+      "nombre": "OKDiario",
+      "web": "https://okdiario.com",
+      "rss": [
+        "https://okdiario.com/feed",
+        {
+          "url": "https://okdiario.com/espana/canarias/feed",
+          "region": "canarias"
+        }
+      ]
+    },
+    {
+      "id": "eleconomista",
+      "nombre": "elEconomista",
+      "web": "https://www.eleconomista.es",
+      "rss": [
+        "https://www.eleconomista.es/rss/rss-portada.php",
+        "https://www.eleconomista.es/rss/rss-economia.php",
+        "https://www.eleconomista.es/rss/rss-mercados.php"
+      ]
+    },
+    {
+      "id": "canarias7",
+      "nombre": "Canarias7",
+      "web": "https://www.canarias7.es",
+      "region": "canarias",
+      "rss": [
+        "https://www.canarias7.es/rss/2.0/portada"
+      ]
+    },
+    {
+      "id": "laprovincia",
+      "nombre": "La Provincia",
+      "web": "https://www.laprovincia.es",
+      "region": "canarias",
+      "rss": [
+        "https://www.laprovincia.es/rss/section/1"
+      ]
+    },
+    {
+      "id": "eldia",
+      "nombre": "El Día",
+      "web": "https://www.eldia.es",
+      "region": "canarias",
+      "rss": [
+        "https://www.eldia.es/rss/section/1"
+      ]
+    },
+    {
+      "id": "diariodeavisos",
+      "nombre": "Diario de Avisos",
+      "web": "https://diariodeavisos.elespanol.com",
+      "region": "canarias",
+      "rss": [
+        "https://diariodeavisos.elespanol.com/feed/"
+      ]
+    },
+    {
+      "id": "canariasahora",
+      "nombre": "Canarias Ahora",
+      "web": "https://www.eldiario.es/canariasahora/",
+      "region": "canarias",
+      "rss": [
+        {
+          "url": "https://www.eldiario.es/rss/canariasahora/",
+          "region": "canarias"
+        }
+      ]
+    },
+    {
+      "id": "gobcan",
+      "nombre": "Gobierno de Canarias",
+      "web": "https://www3.gobiernodecanarias.org/noticias/",
+      "region": "canarias",
+      "rss": [
+        {
+          "url": "https://www3.gobiernodecanarias.org/noticias/feed",
+          "region": "canarias"
+        }
+      ]
+    }
   ]
 }

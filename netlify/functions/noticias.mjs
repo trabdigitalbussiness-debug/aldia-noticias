@@ -1,25 +1,23 @@
 // Sirve las últimas noticias a la app en /noticias.json.
-// Si todavía no hay ninguna guardada (primera visita), las recoge en el momento.
+// Si no hay ninguna guardada o son de hace más de una hora, las recoge en el momento.
 import { getStore } from "@netlify/blobs";
-import { recolectar } from "../lib/recolector.mjs";
+import { recogerYGuardar } from "../lib/guardar.mjs";
 
 const UNA_HORA = 60 * 60 * 1000;
+const json = (datos, extra = {}) => new Response(JSON.stringify(datos), {
+  ...extra, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "public, max-age=120", ...(extra.headers || {}) },
+});
 
 export default async () => {
-  const almacen = getStore("noticias");
-  let datos = await almacen.get("actual", { type: "json" });
-  const viejo = !datos || Date.now() - new Date(datos.actualizado).getTime() > 2 * UNA_HORA;
-  if (viejo) {
+  let datos = await getStore("noticias").get("actual", { type: "json" });
+  if (!datos || Date.now() - new Date(datos.actualizado).getTime() > UNA_HORA) {
     try {
-      datos = await recolectar();
-      await almacen.setJSON("actual", datos);
+      datos = await recogerYGuardar();
     } catch (e) {
-      if (!datos) return new Response(JSON.stringify({ error: "No se pudieron recoger las noticias" }), { status: 503, headers: { "content-type": "application/json; charset=utf-8" } });
+      if (!datos) return json({ error: "No se pudieron recoger las noticias" }, { status: 503, headers: { "cache-control": "no-store" } });
     }
   }
-  return new Response(JSON.stringify(datos), {
-    headers: { "content-type": "application/json; charset=utf-8", "cache-control": "public, max-age=300" },
-  });
+  return json(datos);
 };
 
 export const config = { path: "/noticias.json" };

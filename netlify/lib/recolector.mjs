@@ -4,9 +4,11 @@
 import { createHash } from "node:crypto";
 import fuentes from "../../fuentes.json";
 
-const DIAS_GUARDADOS = 3;
-const MAX_CARACTERES_RESUMEN = 320;
-const SIMILITUD_MISMA_NOTICIA = 0.5;
+const DIAS_GUARDADOS = 2;
+const MAX_CARACTERES_RESUMEN = 260;
+const MIN_CARACTERES_RESUMEN = 40;
+const SIMILITUD_MISMA_NOTICIA = 0.4; // y además al menos 3 palabras en común
+const SIMILITUD_SEGURA = 0.6;        // títulos cortos casi iguales
 const AGENTE = "AppNoticiasResumen/1.0 (lector RSS)";
 
 const SECCIONES = {
@@ -46,21 +48,63 @@ export function limpiarHtml(t) {
   return s.replace(/\s+/g, " ").trim();
 }
 
+// Coletillas y restos que los RSS añaden y que no aportan nada al resumen.
+const COLETILLAS_FINAL = [
+  /\s*(La entrada|The post)\s.+\s(apareci[oó] primero en|se public[oó] primero en|appeared first on)\s.+$/i,
+  /\s*(Seguir leyendo|Sigue leyendo|Continuar leyendo|Leer la noticia completa|Leer m[aá]s|Leer|Ver m[aá]s|M[aá]s informaci[oó]n)\s*[.:…»>\]]*\s*$/i,
+  /\s*(\[\s*(…|\.\.\.)\s*\]|\(\s*(…|\.\.\.)\s*\)|\[\s*\+\s*\])\s*$/,
+];
+// "MADRID, 25 (EUROPA PRESS) -", "Las Palmas de Gran Canaria, 25 nov (EFE).-"
+const SELLO_AGENCIA = /^[A-ZÁÉÍÓÚÑa-záéíóúñ .'/-]{2,45},?\s+\d{1,2}(\s+[a-zA-Z]{3,10}\.?)?\s*\((EUROPA PRESS|EFE|EP|SERVIMEDIA|AGENCIAS|OTR PRESS)\)\s*[.:]?\s*[-–—]+\s*/i;
+
 export function resumir(texto, titulo) {
   let t = limpiarHtml(texto);
-  t = t.replace(/\s*(Seguir leyendo|Leer m[aá]s|Sigue leyendo|Ver m[aá]s)\.?\s*$/i, "");
-  if (!t || sinAcentos(t) === sinAcentos(titulo)) return "";
-  const frases = t.split(/(?<=[.!?])\s+(?=[A-ZÁÉÍÓÚÑ¿¡«"])/);
+  for (let vuelta = 0; vuelta < 3; vuelta++) for (const re of COLETILLAS_FINAL) t = t.replace(re, "");
+  t = t.replace(SELLO_AGENCIA, "").trim();
+  // Si la entradilla empieza repitiendo el titular, se quita.
+  const tt = sinAcentos(titulo).replace(/[^a-z0-9ñ]+/g, " ").trim();
+  if (tt && sinAcentos(t).replace(/[^a-z0-9ñ]+/g, " ").trim().startsWith(tt)) {
+    t = t.slice(Math.min(t.length, titulo.length)).replace(/^[\s.:;,–—-]+/, "");
+  }
+  if (t.length < MIN_CARACTERES_RESUMEN || sinAcentos(t) === sinAcentos(titulo)) return "";
+  t = t.charAt(0).toUpperCase() + t.slice(1);
+  const frases = t.split(/(?<=[.!?…])\s+(?=[A-ZÁÉÍÓÚÑ¿¡«"“])/);
   let r = "";
-  for (const f of frases.slice(0, 3)) {
-    if (r.length + f.length > MAX_CARACTERES_RESUMEN && r) break;
+  for (const f of frases) {
+    if (r && r.length + 1 + f.length > MAX_CARACTERES_RESUMEN) break;
     r = (r + " " + f).trim();
   }
   if (r.length > MAX_CARACTERES_RESUMEN) {
     const corte = r.slice(0, MAX_CARACTERES_RESUMEN);
-    r = corte.slice(0, corte.lastIndexOf(" ")).replace(/[,;:]+$/, "") + "…";
+    r = corte.slice(0, corte.lastIndexOf(" ")).replace(/[,;:(«"“–—-]+$/, "").trim() + "…";
   }
   return r;
+}
+
+// ---------- Canarias ----------
+const PISTAS_CANARIAS = ["canarias", "canario", "canaria", "canarios", "canarias7", "tenerife", "gran canaria", "lanzarote",
+  "fuerteventura", "la palma", "la gomera", "el hierro", "la graciosa", "las palmas", "santa cruz de tenerife", "cabildo",
+  "clavijo", "teide", "maspalomas", "arrecife", "puerto del rosario", "la laguna", "telde", "arona", "adeje", "binter",
+  "ud las palmas", "cd tenerife", "guaguas", "titsa", "puerto de la cruz", "san bartolome de tirajana", "mogan", "agaete",
+  "corralejo", "cayuco", "cayucos", "ruta canaria"];
+const RE_CANARIAS = new RegExp(`(^|[^a-z0-9ñ])(${PISTAS_CANARIAS.map((p) => escaparRe(p)).join("|")})($|[^a-z0-9ñ])`);
+const SECCIONES_CANARIAS = ["canarias", "tenerife", "gran-canaria", "las-palmas-de-gran-canaria", "santa-cruz-de-tenerife", "lanzarote",
+  "fuerteventura", "la-palma", "la-gomera", "el-hierro", "canariasahora", "islas", "municipios", "sur", "norte", "local"];
+function escaparRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+
+export function esDeCanarias({ enlace, titulo, resumen, regional, feedRegional }) {
+  if (feedRegional) return true;
+  const ruta = sinAcentos(String(enlace || "").replace(/^https?:\/\/[^/]+/, ""));
+  const trozos = ruta.split(/[/_.?=&]+/);
+  if (trozos.some((t) => SECCIONES_CANARIAS.includes(t) && t !== "local" && t !== "sur" && t !== "norte" && t !== "islas" && t !== "municipios")) return true;
+  if (RE_CANARIAS.test(sinAcentos(`${titulo} ${resumen}`))) return true;
+  if (regional) {
+    // En un periódico canario, lo que no está en una sección general (España, Mundo…) es local.
+    if (trozos.some((t) => SECCIONES_CANARIAS.includes(t))) return true;
+    const general = Object.values(SECCIONES).flat().filter((s) => s !== "canarias" && s !== "local");
+    return !trozos.some((t) => general.includes(t));
+  }
+  return false;
 }
 
 const escapar = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -154,33 +198,42 @@ export function leerRss(xml) {
 }
 
 // ---------- Agrupar la misma noticia ----------
-const palabras = (t) => new Set((sinAcentos(t).match(/[a-z0-9ñ]+/g) || []).filter((w) => w.length > 2 && !PALABRAS_VACIAS.has(w)));
-function similitud(a, b) {
-  if (!a.size || !b.size) return 0;
+// Se comparan las palabras importantes de los titulares, recortadas a su raíz
+// (las 6 primeras letras), para que «dispara» y «disparan» cuenten como iguales.
+export const palabras = (t) => new Set((sinAcentos(t).match(/[a-z0-9ñ]+/g) || [])
+  .filter((w) => w.length > 2 && !PALABRAS_VACIAS.has(w)).map((w) => w.slice(0, 6)));
+export function parecidas(a, b) {
+  if (!a.size || !b.size) return false;
   let comunes = 0;
   for (const w of a) if (b.has(w)) comunes++;
-  return comunes / (a.size + b.size - comunes);
+  const s = comunes / (a.size + b.size - comunes);
+  return s >= SIMILITUD_SEGURA || (s >= SIMILITUD_MISMA_NOTICIA && comunes >= 3);
 }
 
 function agrupar(noticias) {
   const grupos = [];
   for (const n of [...noticias].sort((x, y) => (y.fecha || "").localeCompare(x.fecha || ""))) {
     const p = palabras(n.titulo);
-    const destino = grupos.find((g) => similitud(p, g._p) >= SIMILITUD_MISMA_NOTICIA && !g.fuentes.some((f) => f.periodico === n.periodico));
-    const fuente = { periodico: n.periodico, titulo: n.titulo, enlace: n.enlace };
+    const destino = grupos.find((g) => !g.fuentes.some((f) => f.periodico === n.periodico) && g._p.some((q) => parecidas(p, q)));
+    const fuente = { periodico: n.periodico, enlace: n.enlace };
     if (destino) {
       destino.fuentes.push(fuente);
-      if (!destino.resumen && n.resumen) destino.resumen = n.resumen;
+      destino._p.push(p);
+      if (n.canarias) destino.canarias = true;
+      // Se queda con el resumen más completo y con la primera foto que haya.
+      if (n.resumen && n.resumen.length > (destino.resumen || "").length) destino.resumen = n.resumen;
       if (!destino.imagen && n.imagen) destino.imagen = n.imagen;
     } else {
-      grupos.push({
+      const g = {
         id: createHash("sha1").update(n.enlace).digest("hex").slice(0, 12),
         titulo: n.titulo, resumen: n.resumen, tema: n.tema, imagen: n.imagen,
-        fecha: n.fecha, fuentes: [fuente], _p: p,
-      });
+        fecha: n.fecha, fuentes: [fuente], _p: [p],
+      };
+      if (n.canarias) g.canarias = true;
+      grupos.push(g);
     }
   }
-  for (const g of grupos) delete g._p;
+  for (const g of grupos) { delete g._p; if (!g.imagen) delete g.imagen; if (!g.resumen) delete g.resumen; }
   return grupos;
 }
 
@@ -195,19 +248,19 @@ export async function recolectar({ leerFuente } = {}) {
   const config = fuentes;
   const ahora = new Date();
   const limite = new Date(ahora - DIAS_GUARDADOS * 864e5).toISOString();
-  const tareas = config.periodicos.flatMap((p) => p.rss.map((url) => ({ p, url })));
-  const resultados = await Promise.all(tareas.map(async ({ p, url }) => {
+  const tareas = config.periodicos.flatMap((p) => p.rss.map((f) => (typeof f === "string" ? { p, url: f } : { p, url: f.url, feed: f })));
+  const resultados = await Promise.all(tareas.map(async ({ p, url, feed }) => {
     try {
       const xml = leerFuente ? await leerFuente(p, url) : await descargar(url);
-      if (xml == null) return { p, url, items: null };
-      return { p, url, items: leerRss(xml) };
+      if (xml == null) return { p, url, feed, items: null };
+      return { p, url, feed, items: leerRss(xml) };
     } catch (error) {
-      return { p, url, error: String(error.message || error).slice(0, 200) };
+      return { p, url, feed, error: String(error.message || error).slice(0, 200) };
     }
   }));
 
   const todas = [], estado = [];
-  for (const { p, url, items, error } of resultados) {
+  for (const { p, url, feed, items, error } of resultados) {
     if (items === null) continue;
     if (error) { estado.push({ periodico: p.nombre, rss: url, ok: false, error }); continue; }
     estado.push({ periodico: p.nombre, rss: url, ok: true, noticias: items.length });
@@ -218,6 +271,8 @@ export async function recolectar({ leerFuente } = {}) {
         titulo: it.titulo, enlace: it.enlace, fecha: it.fecha || ahora.toISOString().replace(/\.\d{3}Z$/, "+00:00"),
         resumen, periodico: p.nombre, imagen: it.imagen,
         tema: asignarTema(it.enlace, it.categorias, it.titulo, resumen, config.temas),
+        canarias: esDeCanarias({ enlace: it.enlace, titulo: it.titulo, resumen,
+          regional: p.region === "canarias", feedRegional: feed?.region === "canarias" }),
       });
     }
   }
@@ -226,6 +281,7 @@ export async function recolectar({ leerFuente } = {}) {
   return {
     actualizado: ahora.toISOString().replace(/\.\d{3}Z$/, "+00:00"),
     temas: config.temas.map((t) => ({ id: t.id, nombre: t.nombre })),
+    periodicos: config.periodicos.map((p) => ({ nombre: p.nombre, ...(p.region ? { region: p.region } : {}) })),
     noticias: agrupar(unicas),
     estado_fuentes: estado,
   };

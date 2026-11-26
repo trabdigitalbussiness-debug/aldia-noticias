@@ -1,7 +1,9 @@
 "use strict";
 
-const estado = { datos: null, error: false, mes: null, mesError: false, filtro: null, busqueda: "", nuevas: false, cargando: false };
+const estado = { datos: null, error: false, nuevos: null, mes: {}, busqueda: "", ultimaComprobacion: 0 };
 const vista = document.getElementById("vista");
+const POR_PAGINA = 20;
+const CADA_CUANTO_COMPROBAR = 5 * 60 * 1000;
 
 // ---------- Utilidades ----------
 function leer(clave, porDefecto) {
@@ -20,74 +22,94 @@ function el(etiqueta, props, ...hijos) {
   for (const h of hijos.flat()) if (h != null && h !== false) n.append(h);
   return n;
 }
-function icono(d) {
+function icono(ruta, extra = "") {
   const s = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   s.setAttribute("viewBox", "0 0 24 24");
   s.setAttribute("aria-hidden", "true");
-  s.innerHTML = d;
+  s.innerHTML = ruta + extra;
   return s;
 }
+const ICONOS = {
+  compartir: '<path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/>',
+  guardar: '<path d="M6 3h12v18l-6-4-6 4z"/>',
+};
+const sinAcentos = (t) => String(t || "").toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "");
 function haceCuanto(iso) {
   const min = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
   if (!isFinite(min)) return "";
   if (min < 1) return "ahora";
-  if (min < 60) return `hace ${min} min`;
+  if (min < 60) return `${min} min`;
   const h = Math.round(min / 60);
-  if (h < 24) return `hace ${h} h`;
+  if (h < 24) return `${h} h`;
   const d = Math.round(h / 24);
-  return d === 1 ? "ayer" : `hace ${d} días`;
+  if (d === 1) return "ayer";
+  if (d < 7) return `hace ${d} días`;
+  return new Date(iso).toLocaleDateString("es-ES", { day: "numeric", month: "short" });
 }
-const sinAcentos = (t) => String(t || "").toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "");
 const plural = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
 const nombreTema = (id) => (estado.datos?.temas.find((t) => t.id === id) || {}).nombre || id;
-const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
-const nombreMes = (m) => (m ? MESES[parseInt(m.slice(5, 7), 10) - 1] + " de " + m.slice(0, 4) : "");
+const nombreMes = (clave) => new Date(clave + "-15T12:00:00Z").toLocaleDateString("es-ES", { month: "long" });
+
+let temporizadorAviso;
+function aviso(texto) {
+  let t = document.querySelector(".aviso");
+  if (!t) { t = el("div", { class: "aviso", role: "status" }); document.body.append(t); }
+  t.textContent = texto;
+  t.classList.add("visible");
+  clearTimeout(temporizadorAviso);
+  temporizadorAviso = setTimeout(() => t.classList.remove("visible"), 2500);
+}
 
 // ---------- Preferencias (en este móvil) ----------
 const guardadas = () => leer("guardadas", {});
 const periodicosOcultos = () => new Set(leer("ocultos", []));
+const canariasEnHoy = () => leer("canariasEnHoy", false);
+const filtroPeriodico = () => leer("filtroPeriodico", "");
 
-function visibles(noticias) {
+const regionales = () => new Set((estado.datos.periodicos || []).filter((p) => p.region).map((p) => p.nombre));
+
+// Noticias quitando los periódicos que la persona ha ocultado, de más nueva a más vieja.
+function noticiasBase() {
   const ocultos = periodicosOcultos();
-  return noticias
-    .map((n) => ({ ...n, fuentes: n.fuentes.filter((f) => !ocultos.has(f.periodico)) }))
+  return estado.datos.noticias
+    .map((n) => (ocultos.size ? { ...n, fuentes: n.fuentes.filter((f) => !ocultos.has(f.periodico)) } : n))
     .filter((n) => n.fuentes.length)
     .sort((a, b) => (b.fecha || "").localeCompare(a.fecha || ""));
 }
-const noticiasVisibles = () => visibles(estado.datos.noticias);
-const conFiltro = (ns) => (estado.filtro ? ns.filter((n) => n.fuentes.some((f) => f.periodico === estado.filtro)) : ns);
+// Para Hoy y Temas: las noticias locales de Canarias que solo publican los periódicos
+// canarios se quedan en «Canarias» (salvo que se active en Perfil).
+function noticiasGenerales() {
+  const ns = noticiasBase();
+  if (canariasEnHoy()) return ns;
+  const reg = regionales();
+  return ns.filter((n) => n.region !== "canarias" || n.fuentes.some((f) => !reg.has(f.periodico)));
+}
+const noticiasCanarias = () => noticiasBase().filter((n) => n.region === "canarias");
 
-// Lo más importante: lo que cuentan más periódicos en las últimas 24 horas.
-function importantes(ns, cuantas) {
-  const hace24h = new Date(Date.now() - 864e5).toISOString();
-  const recientes = ns.filter((n) => (n.fecha || "") >= hace24h);
-  const base = recientes.length >= cuantas ? recientes : ns;
-  return [...base].sort((a, b) => b.fuentes.length - a.fuentes.length || (b.fecha || "").localeCompare(a.fecha || "")).slice(0, cuantas);
+function aplicarFiltro(ns) {
+  const f = filtroPeriodico();
+  return f ? ns.filter((n) => n.fuentes.some((x) => x.periodico === f)) : ns;
 }
 
-// ---------- Fotos ligeras ----------
-// En la web publicada, las fotos pasan por el servicio de imágenes de Netlify,
-// que las reduce al tamaño de la pantalla y las convierte a un formato ligero.
-const conServicioFotos = !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname) && location.protocol === "https:";
-function fotoLigera(url, ancho, alto) {
-  if (!conServicioFotos || !/^https:\/\//.test(url)) return url;
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
-  const p = new URLSearchParams({ url, w: String(Math.round(ancho * dpr)), q: "70" });
-  if (alto) { p.set("h", String(Math.round(alto * dpr))); p.set("fit", "cover"); }
-  return "/.netlify/images?" + p.toString();
+// ---------- Fotos ----------
+// En Netlify las fotos pasan por su servicio de imágenes: las recorta al tamaño justo
+// y las convierte a WebP/AVIF, así pesan una fracción y cargan mucho antes.
+const usarCdnImagenes = !/^(localhost|127\.|\[::1\])/.test(location.hostname) && location.protocol === "https:";
+function urlImagen(src, ancho, alto) {
+  if (!usarCdnImagenes) return src;
+  return `/.netlify/images?url=${encodeURIComponent(src)}&w=${ancho}&h=${alto}&fit=cover&q=70`;
 }
-function foto(n, clase, { grande = false, prioridad = false } = {}) {
+function foto(n, clase, grande = false) {
   if (!n.imagen) return null;
-  const ancho = grande ? Math.min(680, window.innerWidth) : 96;
-  const alto = grande ? Math.round(ancho * 9 / 16) : 96;
+  const [w, h] = grande ? [800, 450] : [192, 192];
   const img = el("img", {
-    class: clase, src: fotoLigera(n.imagen, ancho, alto), alt: "", width: ancho, height: alto,
-    loading: prioridad ? "eager" : "lazy", decoding: "async", fetchpriority: prioridad ? "high" : null, referrerpolicy: "no-referrer",
+    class: clase, src: urlImagen(n.imagen, w, h), alt: "", width: grande ? 800 : 96, height: grande ? 450 : 96,
+    loading: grande ? "eager" : "lazy", fetchpriority: grande ? "high" : "low", decoding: "async", referrerpolicy: "no-referrer",
   });
-  // Si la versión ligera falla, se prueba la original; si tampoco carga, la tarjeta queda solo con texto.
-  let original = false;
+  img.addEventListener("load", () => img.classList.add("cargada"));
   img.addEventListener("error", () => {
-    if (!original && img.src !== n.imagen) { original = true; img.src = n.imagen; return; }
+    // Si falla la versión optimizada, se prueba la original; si tampoco, la tarjeta queda solo con texto.
+    if (img.src.includes("/.netlify/images") && !img.dataset.original) { img.dataset.original = "1"; img.src = n.imagen; return; }
     const c = img.closest(".con-foto"); img.remove(); if (c) c.classList.remove("con-foto");
   });
   return img;
@@ -97,7 +119,7 @@ function foto(n, clase, { grande = false, prioridad = false } = {}) {
 function botonGuardar(n) {
   const marcada = !!guardadas()[n.id];
   const b = el("button", {
-    class: "accion", type: "button", "aria-pressed": String(marcada),
+    class: "icono-boton guardar", type: "button", "aria-pressed": String(marcada),
     "aria-label": marcada ? "Quitar de guardadas" : "Guardar noticia",
     onclick: () => {
       const g = guardadas();
@@ -106,45 +128,78 @@ function botonGuardar(n) {
       const ahora = !!g[n.id];
       b.setAttribute("aria-pressed", String(ahora));
       b.setAttribute("aria-label", ahora ? "Quitar de guardadas" : "Guardar noticia");
+      aviso(ahora ? "Guardada" : "Quitada de guardadas");
       if (location.hash === "#guardadas" && !ahora) pintar();
     },
-  }, icono('<path d="M6 3h12v18l-6-4-6 4z"/>'));
+  }, icono(ICONOS.guardar));
   return b;
 }
 
+function botonCompartir(n) {
+  return el("button", { class: "icono-boton", type: "button", "aria-label": "Compartir noticia", onclick: () => compartir(n) }, icono(ICONOS.compartir));
+}
+
 async function compartir(n) {
-  const url = n.fuentes[0]?.enlace || location.href;
-  const texto = `${n.titulo} (${n.fuentes[0]?.periodico || "al día"})`;
+  const url = n.fuentes[0].enlace;
+  const datos = { title: n.titulo, text: `${n.titulo} (${n.fuentes[0].periodico})`, url };
   if (navigator.share) {
-    try { await navigator.share({ title: n.titulo, text: texto, url }); } catch (e) {}
+    try { await navigator.share(datos); } catch (e) { /* cancelado */ }
     return;
   }
-  window.open("https://wa.me/?text=" + encodeURIComponent(`${texto} ${url}`), "_blank", "noopener");
+  hojaCompartir(n, url);
 }
-const botonCompartir = (n) => el("button", { class: "accion", type: "button", "aria-label": "Compartir noticia", onclick: () => compartir(n) },
-  icono('<path d="M12 15V3M7 8l5-5 5 5"/><path d="M5 12v8h14v-8"/>'));
+
+function hojaCompartir(n, url) {
+  document.querySelector(".hoja")?.remove();
+  const texto = `${n.titulo} ${url}`;
+  const cerrar = () => hoja.remove();
+  const hoja = el("div", { class: "hoja", role: "dialog", "aria-modal": "true", "aria-label": "Compartir", onclick: (e) => { if (e.target === hoja) cerrar(); } },
+    el("div", { class: "hoja-caja" },
+      el("p", { class: "etiqueta" }, "Compartir"),
+      el("p", { class: "hoja-titulo" }, n.titulo),
+      el("a", { class: "boton", href: `https://wa.me/?text=${encodeURIComponent(texto)}`, target: "_blank", rel: "noopener noreferrer", onclick: cerrar }, "WhatsApp"),
+      el("a", { class: "boton secundario", href: `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(n.titulo)}`, target: "_blank", rel: "noopener noreferrer", onclick: cerrar }, "Telegram"),
+      el("a", { class: "boton secundario", href: `mailto:?subject=${encodeURIComponent(n.titulo)}&body=${encodeURIComponent(url)}`, onclick: cerrar }, "Correo"),
+      el("button", { class: "boton secundario", type: "button", onclick: async () => {
+        try { await navigator.clipboard.writeText(url); aviso("Enlace copiado"); } catch (e) { prompt("Copia el enlace:", url); }
+        cerrar();
+      } }, "Copiar enlace"),
+      el("button", { class: "boton texto", type: "button", onclick: cerrar }, "Cancelar")
+    )
+  );
+  document.addEventListener("keydown", function esc(e) { if (e.key === "Escape") { cerrar(); document.removeEventListener("keydown", esc); } });
+  document.body.append(hoja);
+  hoja.querySelector("a, button").focus();
+}
 
 function acciones(n, max) {
   const enlaces = n.fuentes.slice(0, max).map((f) =>
-    el("a", { class: "fuente", href: f.enlace, target: "_blank", rel: "noopener noreferrer" }, `${f.periodico} ↗`)
+    el("a", { class: "fuente", href: f.enlace, target: "_blank", rel: "noopener noreferrer", title: f.titulo }, `${f.periodico} ↗`)
   );
   const resto = n.fuentes.length - max;
-  if (resto > 0) enlaces.push(el("span", { class: "fuente", "aria-label": `y ${resto} periódicos más` }, `+${resto}`));
-  return el("div", { class: "acciones" }, enlaces, el("span", { class: "botones" }, botonCompartir(n), botonGuardar(n)));
+  if (resto > 0) {
+    const mas = el("button", { class: "fuente", type: "button", "aria-label": `Ver ${resto} periódicos más`, onclick: () => {
+      mas.replaceWith(...n.fuentes.slice(max).map((f) =>
+        el("a", { class: "fuente", href: f.enlace, target: "_blank", rel: "noopener noreferrer", title: f.titulo }, `${f.periodico} ↗`)));
+    } }, `+${resto}`);
+    enlaces.push(mas);
+  }
+  return el("div", { class: "acciones" }, el("div", { class: "fuentes" }, enlaces), botonCompartir(n), botonGuardar(n));
 }
 
 function meta(n, conTema) {
   const partes = [];
-  if (conTema) partes.push(n.canarias && conTema === "canarias" ? "Canarias" : nombreTema(n.tema));
+  if (conTema) partes.push(nombreTema(n.tema));
+  if (n.region === "canarias" && conTema) partes.push("Canarias");
   partes.push(haceCuanto(n.fecha));
   if (n.fuentes.length > 1) partes.push(`${n.fuentes.length} periódicos`);
   return el("span", { class: "etiqueta" }, partes.join(" · "));
 }
 
-function tarjeta(n, conTema = true, numero) {
-  return el("article", { class: "noticia" + (n.imagen ? " con-foto" : "") },
+function tarjeta(n, conTema = true, puesto = null) {
+  return el("article", { class: "noticia" + (n.imagen ? " con-foto" : "") + (puesto ? " con-puesto" : "") },
     el("div", { class: "cuerpo" },
-      numero ? el("span", { class: "numero" }, String(numero)) : null,
+      puesto ? el("span", { class: "puesto", "aria-label": `Número ${puesto}` }, String(puesto)) : null,
       meta(n, conTema),
       el("h2", { class: "titular" }, n.titulo),
       n.resumen ? el("p", {}, n.resumen) : null
@@ -154,176 +209,191 @@ function tarjeta(n, conTema = true, numero) {
   );
 }
 
-function principal(n, etiqueta) {
-  return el("article", { class: "principal" + (n.imagen ? "" : " sin-foto") },
-    foto(n, "foto-grande", { grande: true, prioridad: true }),
-    el("span", { class: "etiqueta" }, etiqueta),
+function principal(n, etiquetaTexto) {
+  return el("article", { class: "principal" },
+    foto(n, "foto-grande", true),
+    el("span", { class: "etiqueta" }, `${etiquetaTexto} · ${plural(n.fuentes.length, "periódico", "periódicos")}`),
     el("h2", { class: "titular" }, n.titulo),
     n.resumen ? el("p", {}, n.resumen) : null,
     acciones(n, 3)
   );
 }
 
-function lista(noticias, conTema, numerada) {
-  if (!noticias.length) return el("p", { class: "vacio" }, "No hay noticias aquí todavía.");
-  return el("div", {}, noticias.map((n, i) => tarjeta(n, conTema, numerada ? i + 1 : null)));
+// Lista que enseña 20 noticias y un botón para ver más (la página carga mucho más rápido).
+function lista(noticias, conTema, { numerada = false, vacio = "No hay noticias aquí todavía." } = {}) {
+  if (!noticias.length) return el("p", { class: "vacio" }, vacio);
+  const caja = el("div", { class: "lista" });
+  let mostradas = 0;
+  const boton = el("button", { class: "boton secundario ver-mas", type: "button", onclick: () => mas() });
+  function mas() {
+    const trozo = noticias.slice(mostradas, mostradas + POR_PAGINA);
+    caja.append(...trozo.map((n, i) => tarjeta(n, conTema, numerada ? mostradas + i + 1 : null)));
+    mostradas += trozo.length;
+    const quedan = noticias.length - mostradas;
+    if (quedan > 0) { boton.textContent = `Ver más noticias (${quedan})`; caja.append(boton); } else boton.remove();
+  }
+  mas();
+  return caja;
 }
 
-const seccion = (titulo, enlace, textoEnlace) => el("div", { class: "seccion" },
-  el("h2", {}, titulo), enlace ? el("a", { href: enlace }, textoEnlace || "Ver todo →") : null);
-
-// Fila de periódicos para filtrar (se puede desplazar de lado).
-function filtroPeriodicos(ns) {
-  const cuenta = {};
-  for (const n of ns) for (const f of n.fuentes) cuenta[f.periodico] = (cuenta[f.periodico] || 0) + 1;
-  const nombres = Object.keys(cuenta).sort((a, b) => cuenta[b] - cuenta[a]);
-  if (nombres.length < 2) return null;
-  if (estado.filtro && !cuenta[estado.filtro]) nombres.unshift(estado.filtro);
-  const chip = (nombre, valor) => el("button", {
-    class: "chip", type: "button", "aria-pressed": String(estado.filtro === valor),
-    onclick: () => { estado.filtro = valor; pintar(); },
-  }, nombre);
-  return el("div", { class: "chips", role: "group", "aria-label": "Filtrar por periódico" },
-    chip("Todos", null), nombres.map((p) => chip(p, p)));
+// Fila de botones para ver solo un periódico.
+function barraPeriodicos(ns) {
+  const actual = filtroPeriodico();
+  const cuenta = new Map();
+  for (const n of ns) for (const f of n.fuentes) cuenta.set(f.periodico, (cuenta.get(f.periodico) || 0) + 1);
+  const nombres = [...cuenta.keys()].sort((a, b) => cuenta.get(b) - cuenta.get(a));
+  if (actual && !cuenta.has(actual)) nombres.unshift(actual);
+  if (nombres.length < 2 && !actual) return null;
+  const chip = (valor, texto) => el("button", {
+    class: "chip", type: "button", "aria-pressed": String(actual === valor),
+    onclick: () => { escribir("filtroPeriodico", valor); pintar(); },
+  }, texto);
+  return el("div", { class: "chips", role: "group", "aria-label": "Ver solo un periódico" },
+    chip("", "Todos"),
+    nombres.map((p) => chip(p, cuenta.has(p) ? `${p} · ${cuenta.get(p)}` : p))
+  );
 }
 
-function lineaActualizado() {
-  const b = el("button", { class: "actualizar", type: "button", onclick: () => cargar(true), "aria-label": "Actualizar noticias" },
-    icono('<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>'), estado.cargando ? "Actualizando…" : "Actualizar");
-  return el("div", { class: "estado" },
-    el("span", {}, `Actualizado ${haceCuanto(estado.datos.actualizado)}`), b);
+function bannerNuevas() {
+  if (!estado.nuevos) return null;
+  return el("button", { class: "banner-nuevas", type: "button", onclick: aplicarNuevas },
+    `${plural(estado.nuevos.cuantas, "noticia nueva", "noticias nuevas")} · Ver`);
+}
+
+function tarjetaMes() {
+  const mes = new Date().toISOString().slice(0, 7);
+  return el("a", { class: "tarjeta-mes", href: "#mes" },
+    el("span", { class: "etiqueta" }, "Recopilatorio"),
+    el("strong", {}, `Lo más importante de ${nombreMes(mes)}`),
+    el("span", {}, "Las noticias que más periódicos han contado este mes →")
+  );
 }
 
 // ---------- Vistas ----------
 function vistaHoy() {
-  const ns = noticiasVisibles();
-  if (!ns.length) return [el("p", { class: "vacio" }, "No hay noticias ahora mismo.")];
-  const top = importantes(ns, 10);
-  const vistas = new Set(top.map((n) => n.id));
-  const piezas = [
-    lineaActualizado(),
-    principal(top[0], `Lo más importante · ${plural(top[0].fuentes.length, "periódico", "periódicos")}`),
-    lista(top.slice(1), true, false),
-    el("a", { class: "tarjeta-mes", href: "#mes" },
-      el("span", { class: "etiqueta" }, "Recopilatorio"),
-      el("strong", {}, `Lo más importante de ${MESES[new Date().getMonth()]}`),
-      el("span", {}, "Las noticias que más han contado los periódicos este mes →")),
-  ];
-  const canarias = ns.filter((n) => n.canarias && !vistas.has(n.id));
-  if (canarias.length) {
-    piezas.push(seccion("Canarias", "#canarias", `Ver ${canarias.length} →`), lista(canarias.slice(0, 3), false));
-    canarias.slice(0, 3).forEach((n) => vistas.add(n.id));
-  }
-  for (const t of estado.datos.temas) {
-    const delTema = ns.filter((n) => n.tema === t.id && !vistas.has(n.id));
-    if (!delTema.length) continue;
-    piezas.push(seccion(t.nombre, `#tema/${t.id}`, `Ver ${ns.filter((n) => n.tema === t.id).length} →`), lista(delTema.slice(0, 3), false));
-  }
-  return piezas;
-}
-
-function vistaCanarias() {
-  const todas = noticiasVisibles().filter((n) => n.canarias);
-  const ns = conFiltro(todas);
-  return [
-    el("h1", {}, "Canarias"),
-    el("p", { class: "sub" }, `${plural(ns.length, "noticia", "noticias")} de las islas`),
-    filtroPeriodicos(todas),
-    ns.length ? principal(ns[0], `Canarias · ${haceCuanto(ns[0].fecha)}`) : null,
-    lista(ns.slice(1), true),
-  ];
+  const todas = noticiasGenerales();
+  const ns = aplicarFiltro(todas);
+  const piezas = [bannerNuevas(), barraPeriodicos(todas)];
+  if (!ns.length) return [...piezas, el("p", { class: "vacio" }, "No hay noticias ahora mismo.")];
+  // La principal: la que más periódicos publican (si empatan, la más reciente).
+  const top = ns.reduce((m, n) => (n.fuentes.length > m.fuentes.length ? n : m), ns[0]);
+  return [...piezas, principal(top, "Lo más importante"), tarjetaMes(), lista(ns.filter((n) => n !== top), true)];
 }
 
 function vistaTemas() {
-  const ns = noticiasVisibles();
+  const ns = noticiasGenerales();
   const cuenta = {};
   for (const n of ns) cuenta[n.tema] = (cuenta[n.tema] || 0) + 1;
-  const canarias = ns.filter((n) => n.canarias).length;
   const temas = estado.datos.temas.filter((t) => cuenta[t.id]);
+  const max = Math.max(0, ...temas.map((t) => cuenta[t.id]));
+  const min = Math.min(...temas.map((t) => cuenta[t.id]));
+  const destacado = max > min ? (temas.find((t) => cuenta[t.id] === max) || {}).id : null;
+  const canarias = noticiasCanarias().length;
   return [
     el("h1", {}, "Temas"),
     el("p", { class: "sub" }, "Elige qué quieres leer"),
     el("div", { class: "cuadricula" },
-      el("a", { class: "tema destacado", href: "#mes" }, el("strong", {}, "Lo más importante del mes"), el("span", {}, "Recopilatorio")),
-      canarias ? el("a", { class: "tema", href: "#canarias" }, el("strong", {}, "Canarias"), el("span", {}, plural(canarias, "noticia", "noticias"))) : null,
       temas.map((t) =>
-        el("a", { class: "tema", href: `#tema/${t.id}` },
+        el("a", { class: "tema" + (t.id === destacado ? " destacado" : ""), href: `#tema/${t.id}` },
           el("strong", {}, t.nombre),
           el("span", {}, plural(cuenta[t.id], "noticia", "noticias"))
-        ))
+        )),
+      el("a", { class: "tema", href: "#canarias" }, el("strong", {}, "Canarias"), el("span", {}, plural(canarias, "noticia", "noticias"))),
+      el("a", { class: "tema ancho", href: "#mes" }, el("strong", {}, `Lo más importante de ${nombreMes(new Date().toISOString().slice(0, 7))}`), el("span", {}, "Recopilatorio del mes"))
     ),
   ];
 }
 
 function vistaTema(id) {
-  const todas = noticiasVisibles().filter((n) => n.tema === id);
-  const ns = conFiltro(todas);
+  const todas = noticiasGenerales().filter((n) => n.tema === id);
+  const ns = aplicarFiltro(todas);
   return [
     el("a", { class: "volver", href: "#temas" }, "← Temas"),
     el("h1", {}, nombreTema(id)),
     el("p", { class: "sub" }, plural(ns.length, "noticia", "noticias")),
-    filtroPeriodicos(todas),
+    barraPeriodicos(todas),
     lista(ns, false),
   ];
 }
 
-function vistaBuscar() {
-  const caja = el("input", {
-    class: "buscador", type: "search", placeholder: "Busca una palabra: vivienda, Tenerife, Real Madrid…",
-    value: estado.busqueda, "aria-label": "Buscar noticias", enterkeyhint: "search", autocomplete: "off",
-  });
-  const resultados = el("div", {});
-  const pintarResultados = () => {
-    const palabras = sinAcentos(estado.busqueda).split(/\s+/).filter(Boolean);
-    if (!palabras.length) {
-      resultados.replaceChildren(el("p", { class: "vacio" }, "Escribe para buscar entre todas las noticias de hoy y ayer."));
-      return;
-    }
-    const todas = noticiasVisibles().filter((n) => {
-      const texto = sinAcentos(`${n.titulo} ${n.resumen || ""} ${n.fuentes.map((f) => f.periodico).join(" ")}`);
-      return palabras.every((p) => texto.includes(p));
-    });
-    const ns = conFiltro(todas);
-    resultados.replaceChildren(
-      el("p", { class: "sub" }, plural(ns.length, "resultado", "resultados")),
-      filtroPeriodicos(todas) || "",
-      ns.length ? lista(ns.slice(0, 80), true) : el("p", { class: "vacio" }, "No hay noticias con esas palabras.")
-    );
-  };
-  let espera;
-  caja.addEventListener("input", () => {
-    estado.busqueda = caja.value;
-    clearTimeout(espera);
-    espera = setTimeout(pintarResultados, 150);
-  });
-  pintarResultados();
-  setTimeout(() => { if (!estado.busqueda) caja.focus(); }, 50);
-  return [el("h1", {}, "Buscar"), caja, resultados];
+function vistaCanarias() {
+  const todas = noticiasCanarias();
+  const ns = aplicarFiltro(todas);
+  const piezas = [
+    el("h1", {}, "Canarias"),
+    el("p", { class: "sub" }, "Lo que pasa en las islas, de los periódicos canarios y nacionales"),
+    barraPeriodicos(todas),
+  ];
+  if (!ns.length) return [...piezas, el("p", { class: "vacio" }, "No hay noticias de Canarias ahora mismo.")];
+  const top = ns.reduce((m, n) => (n.fuentes.length > m.fuentes.length ? n : m), ns[0]);
+  return [...piezas, principal(top, "Lo más importante en Canarias"), lista(ns.filter((n) => n !== top), true)];
 }
 
-function vistaMes() {
-  const piezas = [el("a", { class: "volver", href: "#hoy" }, "← Hoy")];
-  if (!estado.mes && !estado.mesError) { cargarMes(); piezas.push(el("p", { class: "vacio" }, "Cargando el recopilatorio…")); return piezas; }
-  const datos = estado.mes || {};
-  const ns = visibles(datos.noticias || []).sort((a, b) => (b.max || 0) - (a.max || 0) || (b.visto || 0) - (a.visto || 0));
-  piezas.push(
-    el("h1", {}, `Lo más importante de ${datos.mes ? MESES[parseInt(datos.mes.slice(5, 7), 10) - 1] : MESES[new Date().getMonth()]}`),
-    el("p", { class: "sub" }, "Las noticias que más periódicos han contado durante el mes, de más a menos.")
-  );
-  if (datos.meses && datos.meses.length > 1) {
-    piezas.push(el("div", { class: "chips" }, datos.meses.map((m) => el("button", {
-      class: "chip", type: "button", "aria-pressed": String(m === datos.mes),
-      onclick: () => cargarMes(m),
-    }, nombreMes(m)))));
+async function cargarMes(clave) {
+  const k = clave || "actual";
+  if (estado.mes[k]) return;
+  estado.mes[k] = { cargando: true };
+  try {
+    const r = await fetch("mes.json" + (clave ? `?m=${clave}` : ""), { cache: "no-cache" });
+    if (!r.ok) throw new Error(r.status);
+    estado.mes[k] = await r.json();
+  } catch (e) {
+    estado.mes[k] = { error: true };
   }
-  if (!ns.length) {
-    piezas.push(el("p", { class: "vacio" }, estado.mesError
-      ? "No se ha podido cargar el recopilatorio. Revisa la conexión."
-      : "El recopilatorio se va llenando solo con cada actualización. Vuelve en unas horas."));
-    return piezas;
+  if (location.hash.startsWith("#mes")) pintar();
+}
+
+function vistaMes(clave) {
+  const k = clave || "actual";
+  const datos = estado.mes[k];
+  if (!datos) { cargarMes(clave); return [el("p", { class: "vacio" }, "Cargando el recopilatorio…")]; }
+  if (datos.cargando) return [el("p", { class: "vacio" }, "Cargando el recopilatorio…")];
+  const mes = datos.mes || new Date().toISOString().slice(0, 7);
+  const ocultos = periodicosOcultos();
+  let ns = (datos.noticias || []).map((n) => ({ ...n, fuentes: n.fuentes.filter((f) => !ocultos.has(f.periodico)) })).filter((n) => n.fuentes.length);
+  let nota = "Ordenadas por el número de periódicos que las han publicado.";
+  if (!ns.length && !clave) {
+    // El recopilatorio aún se está formando: de momento, lo más contado de los últimos días.
+    ns = noticiasBase().filter((n) => n.fuentes.length >= 2).sort((a, b) => b.fuentes.length - a.fuentes.length).slice(0, 30);
+    nota = "El recopilatorio se va completando cada hora. Mientras tanto, estas son las más contadas de los últimos días.";
   }
-  piezas.push(lista(ns, true, true));
-  return piezas;
+  ns.sort((a, b) => b.fuentes.length - a.fuentes.length || (b.fecha || "").localeCompare(a.fecha || ""));
+  const meses = (datos.meses || []).filter((m) => m !== mes);
+  return [
+    el("a", { class: "volver", href: "#hoy" }, "← Hoy"),
+    el("h1", {}, `Lo más importante de ${nombreMes(mes)}`),
+    el("p", { class: "sub" }, nota),
+    meses.length ? el("div", { class: "chips" }, el("span", { class: "chip", "aria-pressed": "true" }, nombreMes(mes)),
+      meses.map((m) => el("a", { class: "chip", href: `#mes/${m}` }, `${nombreMes(m)} ${m.slice(0, 4)}`))) : null,
+    lista(ns.slice(0, 50), true, { numerada: true, vacio: datos.error ? "No se ha podido cargar el recopilatorio. Revisa la conexión." : "Todavía no hay noticias en este recopilatorio." }),
+  ];
+}
+
+function vistaBuscar() {
+  const resultados = el("div", { class: "resultados", "aria-live": "polite" });
+  const campo = el("input", {
+    class: "buscador", type: "search", placeholder: "Busca por palabra: Alcaraz, vivienda, Tenerife…",
+    "aria-label": "Buscar noticias", enterkeyhint: "search", value: estado.busqueda,
+  });
+  let espera;
+  const buscar = () => {
+    estado.busqueda = campo.value;
+    const palabras = sinAcentos(campo.value).split(/\s+/).filter((w) => w.length > 1);
+    if (!palabras.length) { resultados.replaceChildren(el("p", { class: "vacio" }, "Escribe una o varias palabras.")); return; }
+    const ns = noticiasBase().filter((n) => {
+      const texto = sinAcentos(`${n.titulo} ${n.resumen} ${n.fuentes.map((f) => f.periodico + " " + f.titulo).join(" ")}`);
+      return palabras.every((w) => texto.includes(w));
+    });
+    resultados.replaceChildren(
+      el("p", { class: "sub" }, plural(ns.length, "noticia encontrada", "noticias encontradas")),
+      lista(ns, true, { vacio: "No hay noticias con esas palabras." })
+    );
+  };
+  campo.addEventListener("input", () => { clearTimeout(espera); espera = setTimeout(buscar, 200); });
+  campo.addEventListener("keydown", (e) => { if (e.key === "Enter") campo.blur(); });
+  buscar();
+  setTimeout(() => campo.focus(), 50);
+  return [el("h1", {}, "Buscar"), campo, resultados];
 }
 
 function vistaGuardadas() {
@@ -331,39 +401,45 @@ function vistaGuardadas() {
   return [
     el("h1", {}, "Guardadas"),
     el("p", { class: "sub" }, "Se quedan en este móvil aunque la noticia ya no salga en portada."),
-    ns.length ? lista(ns, true) : el("p", { class: "vacio" }, "Pulsa el marcador de una noticia para guardarla aquí."),
+    lista(ns, true, { vacio: "Pulsa el marcador de una noticia para guardarla aquí." }),
   ];
+}
+
+function interruptor(texto, id, marcado, alCambiar) {
+  return el("label", { class: "opcion", for: id }, texto,
+    el("input", { type: "checkbox", id, checked: marcado, onchange: (e) => alCambiar(e.target.checked) }));
 }
 
 function vistaPerfil() {
   const ocultos = periodicosOcultos();
-  const nombres = [...new Set([
-    ...(estado.datos.periodicos || []).map((p) => p.nombre),
-    ...estado.datos.noticias.flatMap((n) => n.fuentes.map((f) => f.periodico)),
-  ])].sort((a, b) => a.localeCompare(b, "es"));
-  const fallan = new Set();
-  const funcionan = new Set();
-  for (const e of estado.datos.estado_fuentes || []) (e.ok ? funcionan : fallan).add(e.periodico);
-  const opciones = nombres.map((p) => {
-    const id = "p-" + p.replace(/\W+/g, "");
-    const sinNoticias = fallan.has(p) && !funcionan.has(p);
-    return el("label", { class: "opcion", for: id },
-      el("span", {}, p, sinNoticias ? el("small", {}, "Ahora no responde") : null),
-      el("input", {
-        type: "checkbox", id, checked: !ocultos.has(p),
-        onchange: (e) => {
-          const s = periodicosOcultos();
-          if (e.target.checked) s.delete(p); else s.add(p);
-          escribir("ocultos", [...s]);
-        },
-      })
-    );
+  const reg = regionales();
+  const nombres = [...new Set([...(estado.datos.periodicos || []).map((p) => p.nombre),
+    ...estado.datos.noticias.flatMap((n) => n.fuentes.map((f) => f.periodico))])]
+    .sort((a, b) => a.localeCompare(b, "es"));
+  const fallan = new Set((estado.datos.estado_fuentes || []).filter((e) => !e.ok).map((e) => e.periodico));
+  const opcion = (p) => interruptor(fallan.has(p) ? `${p} (sin noticias ahora)` : p, "p-" + p.replace(/\W+/g, ""), !ocultos.has(p), (si) => {
+    const s = periodicosOcultos();
+    if (si) s.delete(p); else s.add(p);
+    escribir("ocultos", [...s]);
   });
+  const apariencia = leer("apariencia", "auto");
+  const botonTema = (valor, texto) => el("button", {
+    class: "chip", type: "button", "aria-pressed": String(apariencia === valor),
+    onclick: () => { escribir("apariencia", valor); aplicarApariencia(); pintar(); },
+  }, texto);
+
   const piezas = [
     el("h1", {}, "Perfil"),
     el("p", { class: "sub" }, "Tus preferencias se guardan solo en este móvil."),
-    el("h2", { class: "etiqueta" }, "Periódicos que quieres ver"),
-    el("div", { class: "ajustes" }, opciones),
+    el("h2", { class: "etiqueta seccion" }, "Apariencia"),
+    el("div", { class: "chips" }, botonTema("auto", "Automático"), botonTema("claro", "Claro"), botonTema("oscuro", "Oscuro")),
+    el("h2", { class: "etiqueta seccion" }, "Canarias"),
+    el("div", { class: "ajustes" },
+      interruptor("Mostrar también en «Hoy» las noticias locales de Canarias", "canarias-hoy", canariasEnHoy(), (si) => escribir("canariasEnHoy", si))),
+    el("h2", { class: "etiqueta seccion" }, "Periódicos nacionales"),
+    el("div", { class: "ajustes" }, nombres.filter((p) => !reg.has(p)).map(opcion)),
+    el("h2", { class: "etiqueta seccion" }, "Periódicos canarios"),
+    el("div", { class: "ajustes" }, nombres.filter((p) => reg.has(p)).map(opcion)),
   ];
   if (avisoInstalar) {
     piezas.push(el("p", { class: "nota" }, "Instala al día para abrirla desde la pantalla de inicio:"),
@@ -374,105 +450,118 @@ function vistaPerfil() {
   const act = new Date(estado.datos.actualizado);
   piezas.push(el("p", { class: "nota" },
     `Noticias actualizadas el ${act.toLocaleString("es-ES", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}. ` +
-    "Se recogen cada 30 minutos de los RSS públicos de cada periódico; pulsa un enlace para leer la noticia completa en su web."));
+    "Los resúmenes salen de los RSS públicos de cada periódico; pulsa un enlace para leer la noticia completa en su web."));
   return piezas;
 }
 
 // ---------- Navegación ----------
+const MENU = { tema: "temas", mes: "hoy", buscar: "" };
 function pintar() {
   const hash = location.hash.replace(/^#/, "") || "hoy";
-  const [seccionActual, param] = hash.split("/");
-  const activa = seccionActual === "tema" || seccionActual === "mes" ? "temas" : seccionActual;
-  document.querySelectorAll(".menu a, .cabecera .buscar").forEach((a) => {
+  const [seccion, param] = hash.split("/");
+  const activa = seccion in MENU ? MENU[seccion] : seccion;
+  document.querySelectorAll(".menu a").forEach((a) => {
     if (a.dataset.vista === activa) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
   });
-  aviso.hidden = !estado.nuevas;
-  if (estado.error && !estado.datos) { vista.replaceChildren(el("p", { class: "vacio" }, "No se han podido cargar las noticias. Revisa la conexión.")); return; }
+  document.querySelector(".boton-buscar")?.setAttribute("aria-pressed", String(seccion === "buscar"));
+  if (estado.error && !estado.datos) { vista.replaceChildren(el("p", { class: "vacio" }, "No se han podido cargar las noticias. Revisa la conexión y desliza hacia abajo para reintentar.")); return; }
   if (!estado.datos) { vista.replaceChildren(el("p", { class: "vacio" }, "Cargando noticias…")); return; }
-  // Al escribir en el buscador no se repinta la caja (para no perder el teclado).
   const piezas =
-    seccionActual === "canarias" ? vistaCanarias() :
-    seccionActual === "temas" ? vistaTemas() :
-    seccionActual === "tema" ? vistaTema(param) :
-    seccionActual === "buscar" ? vistaBuscar() :
-    seccionActual === "mes" ? vistaMes() :
-    seccionActual === "guardadas" ? vistaGuardadas() :
-    seccionActual === "perfil" ? vistaPerfil() : vistaHoy();
+    seccion === "temas" ? vistaTemas() :
+    seccion === "tema" ? vistaTema(param) :
+    seccion === "canarias" ? vistaCanarias() :
+    seccion === "mes" ? vistaMes(param) :
+    seccion === "buscar" ? vistaBuscar() :
+    seccion === "guardadas" ? vistaGuardadas() :
+    seccion === "perfil" ? vistaPerfil() : vistaHoy();
   vista.replaceChildren(...piezas.filter(Boolean));
 }
-window.addEventListener("hashchange", () => { estado.filtro = null; pintar(); window.scrollTo({ top: 0 }); });
+window.addEventListener("hashchange", () => { pintar(); window.scrollTo({ top: 0 }); });
 
 document.getElementById("fecha").textContent =
   new Date().toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "short" });
 
-// ---------- Datos ----------
+// ---------- Apariencia (claro / oscuro) ----------
+function aplicarApariencia() {
+  const a = leer("apariencia", "auto");
+  if (a === "claro" || a === "oscuro") document.documentElement.dataset.tema = a;
+  else delete document.documentElement.dataset.tema;
+}
+
+// ---------- Cargar y actualizar ----------
 async function pedirNoticias() {
   const r = await fetch("noticias.json", { cache: "no-cache" });
   if (!r.ok) throw new Error(r.status);
   return r.json();
 }
 
-async function cargar(manual) {
-  if (estado.cargando) return;
-  estado.cargando = true;
-  if (manual) pintar();
+async function cargar() {
+  pintar();
   try {
     estado.datos = await pedirNoticias();
     estado.error = false;
-    estado.nuevas = false;
   } catch (e) {
     estado.error = true;
   }
-  estado.cargando = false;
+  estado.ultimaComprobacion = Date.now();
   pintar();
 }
 
-async function cargarMes(m) {
+const botonActualizar = document.getElementById("actualizar");
+async function actualizar(manual) {
+  if (botonActualizar.classList.contains("girando")) return;
+  if (manual) botonActualizar.classList.add("girando");
   try {
-    const r = await fetch("mes.json" + (m ? "?m=" + encodeURIComponent(m) : ""), { cache: "no-cache" });
-    if (!r.ok) throw new Error(r.status);
-    estado.mes = await r.json();
-    estado.mesError = false;
+    const nuevos = await pedirNoticias();
+    estado.ultimaComprobacion = Date.now();
+    estado.error = false;
+    if (!estado.datos || manual) {
+      const hayCambios = !estado.datos || nuevos.actualizado !== estado.datos.actualizado;
+      estado.datos = nuevos; estado.nuevos = null; estado.mes = {};
+      pintar();
+      if (manual) aviso(hayCambios ? "Noticias actualizadas" : "Ya tienes las últimas noticias");
+    } else if (nuevos.actualizado !== estado.datos.actualizado) {
+      const conocidas = new Set(estado.datos.noticias.flatMap((n) => n.fuentes.map((f) => f.enlace)));
+      const cuantas = nuevos.noticias.filter((n) => !n.fuentes.some((f) => conocidas.has(f.enlace))).length;
+      if (cuantas) { estado.nuevos = { datos: nuevos, cuantas }; if (!location.hash || location.hash === "#hoy") pintar(); }
+      else estado.datos = nuevos;
+    }
   } catch (e) {
-    estado.mesError = true;
+    if (manual) aviso("Sin conexión: no se han podido actualizar");
+  } finally {
+    botonActualizar.classList.remove("girando");
   }
-  if (location.hash === "#mes") pintar();
 }
-
-// Cada 5 minutos (con la app abierta) mira si hay noticias nuevas y avisa.
-const aviso = el("button", { class: "aviso-nuevas", type: "button", hidden: true,
-  onclick: async () => { estado.nuevas = false; await cargar(true); window.scrollTo({ top: 0, behavior: "smooth" }); } },
-  "Hay noticias nuevas · Ver");
-document.body.append(aviso);
-async function comprobarNuevas() {
-  if (document.hidden || !estado.datos || estado.cargando) return;
-  try {
-    const d = await pedirNoticias();
-    if (d.actualizado && d.actualizado !== estado.datos.actualizado) { estado.nuevas = true; aviso.hidden = false; estado.siguientes = d; }
-  } catch (e) {}
+function aplicarNuevas() {
+  if (!estado.nuevos) return;
+  estado.datos = estado.nuevos.datos; estado.nuevos = null;
+  pintar();
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
-setInterval(comprobarNuevas, 5 * 60 * 1000);
+botonActualizar.addEventListener("click", () => actualizar(true));
+setInterval(() => { if (document.visibilityState === "visible") actualizar(false); }, CADA_CUANTO_COMPROBAR);
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden || !estado.datos) return;
-  // Si vuelves a la app tras más de 30 minutos, se actualiza sola.
-  if (Date.now() - new Date(estado.datos.actualizado).getTime() > 30 * 60 * 1000) cargar(false); else comprobarNuevas();
+  if (document.visibilityState === "visible" && Date.now() - estado.ultimaComprobacion > CADA_CUANTO_COMPROBAR) actualizar(false);
 });
 
 // Deslizar hacia abajo desde arriba del todo para actualizar.
 (() => {
-  let inicio = null;
-  const marca = el("div", { class: "tirar", "aria-hidden": "true" }, "Suelta para actualizar");
-  document.body.append(marca);
-  window.addEventListener("touchstart", (e) => { inicio = window.scrollY <= 0 ? e.touches[0].clientY : null; }, { passive: true });
+  const indicador = document.getElementById("tirar");
+  let inicio = null, distancia = 0;
+  window.addEventListener("touchstart", (e) => {
+    inicio = window.scrollY <= 0 && !document.querySelector(".hoja") ? e.touches[0].clientY : null;
+    distancia = 0;
+  }, { passive: true });
   window.addEventListener("touchmove", (e) => {
     if (inicio == null) return;
-    const d = e.touches[0].clientY - inicio;
-    marca.classList.toggle("visible", d > 80);
+    distancia = Math.max(0, Math.min(110, e.touches[0].clientY - inicio));
+    indicador.style.height = `${distancia * 0.6}px`;
+    indicador.classList.toggle("listo", distancia > 75);
   }, { passive: true });
   window.addEventListener("touchend", () => {
-    if (marca.classList.contains("visible")) cargar(true);
-    marca.classList.remove("visible");
-    inicio = null;
+    if (inicio != null && distancia > 75) actualizar(true);
+    inicio = null; distancia = 0;
+    indicador.style.height = "0px"; indicador.classList.remove("listo");
   });
 })();
 
@@ -496,5 +585,5 @@ if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
 }
 
-pintar();
-cargar(false);
+aplicarApariencia();
+cargar();

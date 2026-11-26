@@ -6,8 +6,8 @@
 [functions]
   node_bundler = "esbuild"
 
-# Las fotos de los periódicos se sirven reducidas y en formato ligero
-# a través del servicio de imágenes de Netlify (/.netlify/images).
+# Permite que el servicio de imágenes de Netlify optimice las fotos de los periódicos
+# (las reduce al tamaño de la pantalla y las convierte a WebP/AVIF).
 [images]
   remote_images = ["https://.*"]
 

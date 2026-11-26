@@ -1,5 +1,6 @@
-// Se ejecuta sola cada 30 minutos: recoge las noticias y las guarda en Netlify Blobs.
-import { recogerYGuardar } from "../lib/guardar.mjs";
+// Se ejecuta sola cada hora: recoge las noticias y las guarda en Netlify Blobs
+// (las actuales y el recopilatorio del mes).
+import { recogerYGuardar } from "../lib/almacen.mjs";
 
 export default async () => {
   const datos = await recogerYGuardar();
@@ -8,4 +9,4 @@ export default async () => {
   for (const e of datos.estado_fuentes.filter((e) => !e.ok)) console.log(`AVISO ${e.periodico}: ${e.rss} -> ${e.error}`);
 };
 
-export const config = { schedule: "*/30 * * * *" };
+export const config = { schedule: "@hourly" };

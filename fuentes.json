@@ -12,7 +12,7 @@
   ],
   "regiones": [
     {"id": "canarias", "nombre": "Canarias",
-     "pistas": ["Canarias", "canario", "canaria", "canarios", "canarias", "Tenerife", "Gran Canaria", "Lanzarote", "Fuerteventura", "La Palma", "La Gomera", "El Hierro", "La Graciosa", "Las Palmas", "Santa Cruz de Tenerife", "La Laguna", "Arrecife", "Puerto del Rosario", "Telde", "Maspalomas", "Teide", "cabildo", "Clavijo", "Adeje", "Arona", "Puerto de la Cruz", "Santa Cruz de La Palma", "San Sebastián de La Gomera", "Valverde", "Agaete", "Gáldar", "Arucas", "Mogán", "Puerto de Mogán", "Los Cristianos", "Tacoronte", "La Orotava", "Icod", "Güímar", "Candelaria", "Ingenio", "Agüimes", "Vecindario", "Corralejo", "Yaiza", "Tías", "Teguise", "Binter", "guagua", "guaguas"]}
+     "pistas": ["Canarias", "canario", "canaria", "canarios", "canarias", "Tenerife", "Gran Canaria", "Lanzarote", "Fuerteventura", "La Palma", "La Gomera", "El Hierro", "La Graciosa", "Las Palmas", "Santa Cruz de Tenerife", "La Laguna", "Arrecife", "Puerto del Rosario", "Telde", "Maspalomas", "Teide", "cabildo", "Clavijo", "Adeje", "Arona", "Puerto de la Cruz", "Santa Cruz de La Palma", "San Sebastián de La Gomera", "Agaete", "Gáldar", "Arucas", "Mogán", "Puerto de Mogán", "Los Cristianos", "Tacoronte", "La Orotava", "Icod de los Vinos", "Güímar", "Agüimes", "Corralejo", "Teguise", "Binter", "guagua", "guaguas", "canariasahora"]}
   ],
   "periodicos": [
     {"id": "elpais", "nombre": "El País", "web": "https://elpais.com", "rss": ["https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/portada"]},
@@ -37,7 +37,7 @@
      "rss": ["https://news.google.com/rss/search?q=site:larazon.es+when:2d&hl=es&gl=ES&ceid=ES:es"]},
 
     {"id": "canarias7", "nombre": "Canarias7", "web": "https://www.canarias7.es", "region": "canarias",
-     "rss": [{"url": "https://www.canarias7.es/rss/2.0/?section=canarias", "toda_la_region": true}]},
+     "rss": ["https://www.canarias7.es/rss/2.0/?section=canarias"]},
     {"id": "laprovincia", "nombre": "La Provincia", "web": "https://www.laprovincia.es", "region": "canarias", "agente": "navegador", "solo_su_web": true,
      "rss": ["https://www.laprovincia.es/rss/"]},
     {"id": "eldia", "nombre": "El Día", "web": "https://www.eldia.es", "region": "canarias", "agente": "navegador", "solo_su_web": true,
@@ -45,6 +45,6 @@
     {"id": "diariodeavisos", "nombre": "Diario de Avisos", "web": "https://diariodeavisos.elespanol.com", "region": "canarias",
      "rss": ["https://diariodeavisos.elespanol.com/feed/"]},
     {"id": "canariasahora", "nombre": "Canarias Ahora", "web": "https://www.eldiario.es/canariasahora/", "region": "canarias",
-     "rss": [{"url": "https://www.eldiario.es/rss/canariasahora/", "toda_la_region": true}]}
+     "rss": ["https://www.eldiario.es/rss/canariasahora/"]}
   ]
 }

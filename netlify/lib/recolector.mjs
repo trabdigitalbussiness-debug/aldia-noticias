@@ -25,17 +25,29 @@ muy no nos o otra otro para pero por porque que quien se sea ser si sin sobre so
 un una uno unos y ya va van dice segun asi hace sido directo ultima hora video videos fotos asi este esta estos estas
 nuevo nueva hoy ayer manana tras despues sera`.split(/\s+/));
 
-const ENTIDADES = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", laquo: "«", raquo: "»", ldquo: "“", rdquo: "”", lsquo: "‘", rsquo: "’", hellip: "…", mdash: "—", ndash: "–", iexcl: "¡", iquest: "¿" };
+const ENTIDADES = {
+  amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", laquo: "«", raquo: "»", ldquo: "“", rdquo: "”", lsquo: "‘", rsquo: "’",
+  hellip: "…", mdash: "—", ndash: "–", iexcl: "¡", iquest: "¿", euro: "€", deg: "°", ordm: "º", ordf: "ª", middot: "·", bull: "•",
+  aacute: "á", eacute: "é", iacute: "í", oacute: "ó", uacute: "ú", Aacute: "Á", Eacute: "É", Iacute: "Í", Oacute: "Ó", Uacute: "Ú",
+  ntilde: "ñ", Ntilde: "Ñ", uuml: "ü", Uuml: "Ü", ccedil: "ç", Ccedil: "Ç", agrave: "à", egrave: "è", ograve: "ò", Agrave: "À", Egrave: "È", Ograve: "Ò",
+};
 
-export function desentidades(t) {
-  return String(t || "").replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e) => {
+function desentidadesUnaVez(t) {
+  return t.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e) => {
     if (e[0] === "#") {
       const n = e[1].toLowerCase() === "x" ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
       return Number.isFinite(n) ? String.fromCodePoint(n) : m;
     }
+    if (e in ENTIDADES) return ENTIDADES[e];
     const k = e.toLowerCase();
     return k in ENTIDADES ? ENTIDADES[k] : m;
   });
+}
+// Algunos periódicos escapan dos veces (&amp;iacute;), así que se repite si hace falta.
+export function desentidades(t) {
+  let s = String(t || "");
+  for (let i = 0; i < 2 && /&(#x[0-9a-f]+|#\d+|[a-z]+);/i.test(s); i++) s = desentidadesUnaVez(s);
+  return s;
 }
 
 export const sinAcentos = (t) => String(t || "").toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "");
@@ -87,13 +99,30 @@ export function asignarTema(enlace, categorias, titulo, resumen, temas) {
 }
 
 // Región (por ahora, Canarias): por la sección del enlace o por lugares que salen en el texto.
+// Los nombres propios («El Hierro», «La Palma») solo cuentan con mayúscula en el texto,
+// para no confundirlos con «el hierro» de las lentejas; en la dirección web valen siempre.
+const conservaMayusculas = (t) => String(t || "").normalize("NFKD").replace(/[̀-ͯ]/g, "");
 function preparaRegiones(regiones) {
-  return (regiones || []).map((r) => ({ id: r.id, res: r.pistas.map(regexPalabra) }));
+  return (regiones || []).map((r) => ({
+    id: r.id,
+    pistas: r.pistas.map((p) => {
+      const propio = /^[A-ZÁÉÍÓÚÑ]/.test(p);
+      const base = escapar(propio ? conservaMayusculas(p) : sinAcentos(p));
+      return {
+        propio,
+        texto: new RegExp(`(^|[^A-Za-z0-9ñÑ])${base}($|[^A-Za-z0-9ñÑ])`, propio ? "" : "i"),
+        ruta: regexPalabra(p),
+      };
+    }),
+  }));
 }
 export function asignarRegion(enlace, titulo, resumen, categorias, regiones) {
   const ruta = sinAcentos(String(enlace || "").replace(/^https?:\/\/[^/]+/, "")).replace(/[-_/.]+/g, " ");
-  const texto = `${ruta} ${sinAcentos(titulo)} ${sinAcentos(resumen)} ${sinAcentos(categorias.join(" "))}`;
-  for (const r of regiones) if (r.res.some((re) => re.test(texto))) return r.id;
+  const texto = conservaMayusculas(`${titulo} ${resumen} ${categorias.join(" ")}`);
+  const textoMin = sinAcentos(texto);
+  for (const r of regiones) {
+    if (r.pistas.some((p) => p.ruta.test(ruta) || (p.propio ? p.texto.test(texto) : p.texto.test(textoMin)))) return r.id;
+  }
   return null;
 }
 
@@ -236,7 +265,7 @@ function agrupar(noticias) {
       destino.fuentes.push(fuente);
       if (!destino.resumen && n.resumen) destino.resumen = n.resumen;
       if (!destino.imagen && n.imagen) destino.imagen = n.imagen;
-      if (!destino.region && n.region) destino.region = n.region;
+      if (n.region) { destino._region = n.region; destino._conRegion++; }
       // Si la abrió un diario deportivo pero la cuenta también un periódico general, manda el tema de este.
       if (destino._forzado && !n.temaForzado) { destino.tema = n.tema; destino._forzado = false; }
     } else {
@@ -244,12 +273,16 @@ function agrupar(noticias) {
         id: huella(n.enlace),
         titulo: n.titulo, resumen: n.resumen, tema: n.tema, imagen: n.imagen,
         fecha: n.fecha, fuentes: [fuente], _p: new Set(p), _forzado: !!n.temaForzado,
+        _region: n.region || null, _conRegion: n.region ? 1 : 0,
       };
-      if (n.region) g.region = n.region;
       grupos.push(g);
     }
   }
-  for (const g of grupos) { delete g._p; delete g._forzado; }
+  for (const g of grupos) {
+    // Es de Canarias si lo es al menos la mitad de los periódicos que la cuentan.
+    if (g._region && g._conRegion * 2 >= g.fuentes.length) g.region = g._region;
+    delete g._p; delete g._forzado; delete g._region; delete g._conRegion;
+  }
   return grupos;
 }
 
